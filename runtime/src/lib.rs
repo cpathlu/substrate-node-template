@@ -38,6 +38,11 @@ use sp_version::RuntimeVersion;
 /// Import the template pallet.
 pub use pallet_template;
 
+pub use pallet_poe;
+
+pub use pallet_kitties;
+
+
 // Make the WASM binary available.
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
@@ -278,18 +283,28 @@ impl pallet_template::Config for Runtime {
 	type Event = Event;
 }
 
+parameter_types! {
+	pub const MaxClaimLength: u32 = 256;
+}
+
+/// Configure the pallet-poe in pallets/poe.
+impl pallet_poe::Config for Runtime {
+	type Event = Event;
+	type MaxClaimLength = MaxClaimLength;
+}
+
 parameter_types! {              // <- add this macro
     // One can own at most 9,999 Kitties
     pub const MaxKittyOwned: u32 = 9999;
 }
 
-
 /// Configure the pallet-template in pallets/template.
 impl pallet_kitties::Config for Runtime {
 	type Event = Event;
 	type Currency = Balances;
-	type KittyRandomness  = RandomnessCollectiveFlip;
+	type KittyRandomness = RandomnessCollectiveFlip;
 	type MaxKittyOwned = MaxKittyOwned;
+	type KittyIndex = u64;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -309,7 +324,8 @@ construct_runtime!(
 		Sudo: pallet_sudo,
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
-		Kitties: pallet_kitties,
+		PoeModule: pallet_poe,
+		SubstrateKitties: pallet_kitties,
 	}
 );
 

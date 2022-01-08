@@ -2,12 +2,15 @@
 
 pub use pallet::*;
 
+mod mock;
+mod tests;
+
 #[frame_support::pallet]
 pub mod pallet {
 	use frame_support::{ensure, pallet_prelude::*};
 	use frame_support::{
-		sp_runtime::traits::Hash,
-		traits::{Currency, Randomness, tokens::ExistenceRequirement},
+		sp_runtime::traits::{AtLeast32BitUnsigned, Bounded, CheckedAdd,One},
+		traits::{Currency, Randomness, tokens::ExistenceRequirement,ReservableCurrency},
 		transactional,
 	};
 	#[cfg(feature = "std")]
@@ -47,12 +50,20 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
 		/// The Currency handler for the Kitties pallet.
-		type Currency: Currency<Self::AccountId>;
+		type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
+
+		//type KittyIndex: u32;
+		//type KittyIndex: Parameter + Member + AtLeast32Bit + Bounded + Default + Copy;
+		type KittyIndex: Parameter + AtLeast32BitUnsigned + Default + Copy + Bounded + CheckedAdd + Sized;
+
 
 		#[pallet::constant]
 		type MaxKittyOwned: Get<u32>;
 
 		type KittyRandomness: Randomness<Self::Hash, Self::BlockNumber>;
+
+		#[pallet::constant]
+		type ReserveForCreateKitty: Get<BalanceOf<Self>>;
 	}
 
 	// Errors.
@@ -67,41 +78,76 @@ pub mod pallet {
 		TransferToSelf,
 		NotEnoughBalance,
 		KittyNotForSale,
+		BreedSameParent,
+		InvalidReserveAmount,
 	}
 
 	// Events.
 	#[pallet::event]
 	#[pallet::generate_deposit(pub (super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		Created(T::AccountId, T::Hash),
-		PriceSet(T::AccountId, T::Hash, Option<BalanceOf<T>>),
-		Transferred(T::AccountId, T::AccountId, T::Hash),
-		Bought(T::AccountId, T::AccountId, T::Hash, BalanceOf<T>),
+		Created(T::AccountId, T::KittyIndex),
+		PriceSet(T::AccountId, T::KittyIndex, Option<BalanceOf<T>>),
+		Transferred(T::AccountId, T::AccountId, T::KittyIndex),
+		Bought(T::AccountId, T::AccountId, T::KittyIndex, BalanceOf<T>),
 	}
 
+	// #[pallet::storage]
+	// #[pallet::getter(fn kitty_cnt)]
+	// pub(super) type KittyCnt<T: Config> = StorageValue<_, u64, T::KittyIndex>;
+
+	/// Keeps track of the number of Kitties in existence.
 	#[pallet::storage]
 	#[pallet::getter(fn kitty_cnt)]
-	pub(super) type KittyCnt<T: Config> = StorageValue<_, u64, ValueQuery>;
+	pub(super) type KittyCnt<T: Config> = StorageValue<_, T::KittyIndex>;
 
+	/// Stores a Kitty's unique traits, owner and price.
 	#[pallet::storage]
 	#[pallet::getter(fn kitties)]
-	pub(super) type Kitties<T: Config> = StorageMap<_, Twox64Concat, T::Hash, Kitty<T>>;
+	pub(super) type Kitties<T: Config> = StorageMap<_, Blake2_128Concat, T::KittyIndex, Kitty<T>>;
 
+	/// Keeps track of what accounts own what Kitties.
 	#[pallet::storage]
 	#[pallet::getter(fn kitties_owned)]
-	pub type KittiesOwned<T: Config> = StorageMap<
+	pub(super) type KittiesOwned<T: Config> = StorageMap<
 		_,
-		Twox64Concat,
+		Blake2_128Concat,
 		T::AccountId,
-		BoundedVec<T::Hash, T::MaxKittyOwned>,
+		BoundedVec<T::KittyIndex, T::MaxKittyOwned>,
 		ValueQuery,
 	>;
+
+
+	#[pallet::genesis_config]
+	pub struct GenesisConfig<T: Config> {
+		pub kitties: Vec<(T::AccountId, [u8; 16], Gender)>,
+	}
+
+	// Required to implement default for GenesisConfig.
+	#[cfg(feature = "std")]
+	impl<T: Config> Default for GenesisConfig<T> {
+		fn default() -> GenesisConfig<T> {
+			GenesisConfig { kitties: vec![] }
+		}
+	}
+
+	#[pallet::genesis_build]
+	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+		fn build(&self) {
+			// When building a kitty from genesis config, we require the dna and gender to be supplied.
+			for (acct, dna, gender) in &self.kitties {
+				let _ = <Pallet<T>>::mint(acct, Some(dna.clone()), Some(gender.clone()));
+			}
+		}
+	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(100)]
 		pub fn create_kitty(origin: OriginFor<T>) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
+
+			T::Currency::reserve(&sender, T::ReserveForCreateKitty::get()).map_err(|_| Error::<T>::InvalidReserveAmount)?;
 
 			let kitty_id = Self::mint(&sender, None, None)?;
 
@@ -111,9 +157,9 @@ pub mod pallet {
 		}
 
 		#[pallet::weight(100)]
-		pub fn mutate_price(
+		pub fn set_price(
 			origin: OriginFor<T>,
-			kitty_id: T::Hash,
+			kitty_id: T::KittyIndex,
 			new_price: Option<BalanceOf<T>>,
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
@@ -135,7 +181,7 @@ pub mod pallet {
 		pub fn transfer(
 			origin: OriginFor<T>,
 			dest: T::AccountId,
-			kitty_id: T::Hash,
+			kitty_id: T::KittyIndex,
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
 
@@ -158,7 +204,7 @@ pub mod pallet {
 		#[pallet::weight(100)]
 		pub fn buy_kitty(
 			origin: OriginFor<T>,
-			kitty_id: T::Hash,
+			kitty_id: T::KittyIndex,
 			bid_price: BalanceOf<T>,
 		) -> DispatchResult {
 			let buyer = ensure_signed(origin)?;
@@ -193,8 +239,8 @@ pub mod pallet {
 		#[pallet::weight(100)]
 		pub fn breed_kitty(
 			origin: OriginFor<T>,
-			parent1: T::Hash,
-			parent2: T::Hash,
+			parent1: T::KittyIndex,
+			parent2: T::KittyIndex,
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
 			ensure!(Self::is_kitty_owner(&parent1 , &sender)?, <Error<T>>::NotKittyOwner);
@@ -225,7 +271,7 @@ pub mod pallet {
 			payload.using_encoded(blake2_128)
 		}
 
-		pub fn breed_dna(parent1: &T::Hash, parent2: &T::Hash) -> Result<[u8; 16], Error<T>> {
+		pub fn breed_dna(parent1: &T::KittyIndex, parent2: &T::KittyIndex) -> Result<[u8; 16], Error<T>> {
 			let dna1 = Self::kitties(parent1).ok_or(<Error<T>>::KittyNotExist)?.dna;
 			let dna2 = Self::kitties(parent2).ok_or(<Error<T>>::KittyNotExist)?.dna;
 
@@ -236,7 +282,7 @@ pub mod pallet {
 			Ok(new_dna)
 		}
 
-		pub fn is_kitty_owner(kitty_id: &T::Hash, acct: &T::AccountId) -> Result<bool, Error<T>> {
+		pub fn is_kitty_owner(kitty_id: &T::KittyIndex, acct: &T::AccountId) -> Result<bool, Error<T>> {
 			match Self::kitties(kitty_id) {
 				Some(kitty) => Ok(kitty.owner == *acct),
 				None => Err(<Error<T>>::KittyNotExist),
@@ -247,7 +293,7 @@ pub mod pallet {
 			owner: &T::AccountId,
 			dna: Option<[u8; 16]>,
 			gender: Option<Gender>,
-		) -> Result<T::Hash, Error<T>> {
+		) -> Result<T::KittyIndex, Error<T>> {
 			let kitty = Kitty::<T> {
 				dna: dna.unwrap_or_else(Self::gen_dna),
 				price: None,
@@ -255,23 +301,42 @@ pub mod pallet {
 				owner: owner.clone(),
 			};
 
-			let kitty_id = T::Hashing::hash_of(&kitty);
 
-			let new_cnt = Self::kitty_cnt().checked_add(1).ok_or(<Error<T>>::KittyCntOverflow)?;
+			// let new_cnt = Self::kitty_cnt().checked_add(1).ok_or(<Error<T>>::KittyCntOverflow)?;
+
+			let new_cnt = match Self::kitty_cnt() {
+				Some(cnt) => {
+					cnt.checked_add(&One::one()).ok_or(<Error<T>>::KittyCntOverflow)?
+				}
+				None => One::one(),
+			};
+
+			// let kitty_id = match Self::kitty_cnt() {
+			// 	Some(id) => {
+			// 		ensure!(id != T::KittyIndex::max_value(),<Error<T>>::KittyCntOverflow);
+			// 		id
+			// 	}
+			// 	None => {
+			// 		1u32.into()
+			// 	}
+			// };
+			// let new_cnt = Self::kitty_cnt().unwrap().checked_add(&One::one()).ok_or(<Error<T>>::KittyCntOverflow)?;
+
+			let kitty_id = new_cnt;
 
 			<KittiesOwned<T>>::try_mutate(&owner, |kitty_vec| kitty_vec.try_push(kitty_id))
 				.map_err(|_| <Error<T>>::ExceedMaxKittyOwned)?;
 
 			<Kitties<T>>::insert(kitty_id, kitty);
 
-			<KittyCnt<T>>::put(new_cnt);
+			<KittyCnt<T>>::put(kitty_id);
 
 			Ok(kitty_id)
 		}
 
 		#[transactional]
 		pub fn transfer_kitty_to(
-			kitty_id: &T::Hash,
+			kitty_id: &T::KittyIndex,
 			dest: &T::AccountId,
 		) -> Result<(), Error<T>> {
 			let mut kitty = Self::kitties(kitty_id).ok_or(<Error<T>>::KittyNotExist)?;

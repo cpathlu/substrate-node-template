@@ -2,8 +2,9 @@
 members = [
     'node',
 	'pallets/template',
+	'pallets/poe',
 	'pallets/kitties',
-    'runtime',
+	'runtime',
 ]
 [profile.release]
 panic = 'unwind'
