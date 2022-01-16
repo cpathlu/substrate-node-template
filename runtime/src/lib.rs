@@ -42,6 +42,8 @@ pub use pallet_poe;
 
 pub use pallet_kitties;
 
+/// pub use pallet_ocw;
+
 
 // Make the WASM binary available.
 #[cfg(feature = "std")]
@@ -309,6 +311,17 @@ impl pallet_kitties::Config for Runtime {
 	type ReserveForCreateKitty = ReserveForCreateKitty;
 }
 
+
+// parameter_types! {
+
+// }
+
+// // Configure the pallet-ocw in pallets/ocw.
+// impl pallet_ocw::Config for Runtime {
+// 	type Event = Event;
+// }
+
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -328,6 +341,7 @@ construct_runtime!(
 		TemplateModule: pallet_template,
 		PoeModule: pallet_poe,
 		SubstrateKitties: pallet_kitties,
+		//SubstrateOcw: pallet_ocw,
 	}
 );
 

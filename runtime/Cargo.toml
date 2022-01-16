@@ -25,6 +25,11 @@ path = '../pallets/poe'
 default-features = false
 path = '../pallets/kitties'
 
+[dependencies.pallet-ocw]
+default-features = false
+path = '../pallets/ocw'
+
+
 [build-dependencies.substrate-wasm-builder]
 git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-12'
@@ -228,6 +233,7 @@ std = [
     'pallet-transaction-payment-rpc-runtime-api/std',
 	'pallet-transaction-payment/std',
 	'pallet-poe/std',
+	'pallet-ocw/std',
     'sp-api/std',
     'sp-block-builder/std',
     'sp-consensus-aura/std',
