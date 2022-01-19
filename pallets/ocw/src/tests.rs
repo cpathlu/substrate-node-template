@@ -1,19 +1,19 @@
 use crate as pallet_ocw;
 use crate::*;
-use codec::Decode;
+//use codec::Decode;
 use frame_support::{assert_ok, parameter_types};
 use sp_core::{
 	offchain::{testing, OffchainWorkerExt, TransactionPoolExt},
 	sr25519::Signature,
 	H256,
 };
-use std::sync::Arc;
+//use std::sync::Arc;
 
-use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
+// use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 use sp_runtime::{
 	testing::{Header, TestXt},
 	traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
-	RuntimeAppPublic,
+	//RuntimeAppPublic,
 };
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -171,7 +171,6 @@ fn knows_how_to_mock_several_http_calls() {
 
 	// t.execute_with(|| {
 	// 	let price1 = Example::fetch_price().unwrap();
-        
 	// 	let price2 = Example::fetch_price().unwrap();
 	// 	let price3 = Example::fetch_price().unwrap();
 
@@ -180,10 +179,28 @@ fn knows_how_to_mock_several_http_calls() {
 	// 	assert_eq!(price3, 300);
 	// });
 
-    t.execute_with(|| {
-		let price1 = Example::fetch_price().unwrap();
-        
-        println!("{}",price1)
+	// extern mod http;
+	// use http::client::RequestWriter;
+	// use http::method::Get;
+	// use http::status;
+	// use std::os;
+	// let request = RequestWriter::new(Get, "https://api.coincap.io/v2/assets/polkadot");
+    // let response = match request.read_response() {
+    //     Ok(response) => response,
+    //     Err(_request) => unreachable!(), // Uncaught condition will have failed first
+    // };
+    // if response.status == status::Ok {
+    //     println!("Oh goodie, I got me a 200 OK response!");
+    // } else {
+    //     println!("That URL ain't returning 200 OK, it returned {} instead", response.status);
+    // }
+
+	t.execute_with(|| {
+		
+		//let price1 = Example::fetch_price().unwrap();
+		let res = Example::fetch_from_remote().unwrap();
+
+		println!("{:?}", res)
 	})
 }
 

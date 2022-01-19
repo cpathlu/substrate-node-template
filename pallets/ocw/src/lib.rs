@@ -2,6 +2,7 @@
 
 use codec::{Decode, Encode};
 use frame_support::sp_runtime::{
+	offchain as rt_offchain,
 	offchain::{
 		http,
 		storage::{MutateStorageError, StorageRetrievalError, StorageValueRef},
@@ -71,7 +72,7 @@ pub use pallet::*;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use core::{convert::TryInto, fmt};
+	//use core::{convert::TryInto, fmt};
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
 
@@ -112,39 +113,34 @@ pub mod pallet {
 		type UnsignedPriority: Get<TransactionPriority>;
 	}
 	use serde::{Deserialize, Deserializer};
-	use sp_std::{collections::vec_deque::VecDeque, prelude::*, str};
 	use sp_arithmetic::per_things::Permill;
+	//use sp_std::{collections::vec_deque::VecDeque, prelude::*, str};
+	use sp_std::{prelude::*, str};
 
+	// const HTTP_REMOTE_REQUEST: &str = "https://api.coincap.io/v2/assets/polkadot";
+	// const HTTP_HEADER_USER_AGENT: &str = "cc";
 
-	const HTTP_REMOTE_REQUEST: &str = "https://api.coincap.io/v2/assets/polkadot";
-	const HTTP_HEADER_USER_AGENT: &str = "cc";
-
-	const FETCH_TIMEOUT_PERIOD: u64 = 3000; // in milli-seconds
-	const LOCK_TIMEOUT_EXPIRATION: u64 = FETCH_TIMEOUT_PERIOD + 1000; // in milli-seconds
-	const LOCK_BLOCK_EXPIRATION: u32 = 3; // in block number
+	// const FETCH_TIMEOUT_PERIOD: u64 = 3000; // in milli-seconds
+	// const LOCK_TIMEOUT_EXPIRATION: u64 = FETCH_TIMEOUT_PERIOD + 1000; // in milli-seconds
+	// const LOCK_BLOCK_EXPIRATION: u32 = 3; // in block number
 
 	pub type DotPrice = (u64, Permill);
 
 	#[derive(Deserialize, Encode, Decode, Default)]
+    #[allow(non_snake_case)]
 	struct DotPriceInfo {
 		#[serde(deserialize_with = "string_to_bytes")]
 		id: Vec<u8>,
-	
 		#[serde(deserialize_with = "string_to_bytes")]
 		rank: Vec<u8>,
-	
 		#[serde(deserialize_with = "string_to_bytes")]
 		name: Vec<u8>,
-	
 		#[serde(deserialize_with = "string_to_bytes")]
 		marketCapUsd: Vec<u8>,
-	
 		#[serde(deserialize_with = "string_to_bytes")]
 		volumeUsd24Hr: Vec<u8>,
-	
-		#[serde(deserialize_with = "de_string_to_tuple")]
-		priceUsd: DotPrice,
-	
+		#[serde(deserialize_with = "string_to_bytes")]
+		priceUsd: Vec<u8>,
 		#[serde(deserialize_with = "string_to_bytes")]
 		changePercent24Hr: Vec<u8>,
 	}
@@ -152,7 +148,15 @@ pub mod pallet {
 	#[derive(Debug, Deserialize, Encode, Decode, Default)]
 	struct IndexingData(Vec<u8>, u64);
 
-	pub fn de_string_to_bytes<'de, D>(de: D) -> Result<Vec<u8>, D::Error>
+	pub fn string_to_bytes<'de, D>(de: D) -> Result<Vec<u8>, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
+		let s: &str = Deserialize::deserialize(de)?;
+		Ok(s.as_bytes().to_vec())
+	}
+
+	pub fn ç<'de, D>(de: D) -> Result<Vec<u8>, D::Error>
 	where
 		D: Deserializer<'de>,
 	{
@@ -369,8 +373,8 @@ pub mod pallet {
 	/// This is used to calculate average price, should have bounded size.
 	#[pallet::storage]
 	#[pallet::getter(fn prices)]
-	//pub(super) type Prices<T: Config> = StorageValue<_, Vec<u32>, ValueQuery>;
-	pub type Prices<T> = StorageValue<_, VecDeque<(u64, Permill)>, ValueQuery>;
+	pub(super) type Prices<T: Config> = StorageValue<_, Vec<u32>, ValueQuery>;
+	//pub type Prices<T> = StorageValue<_, VecDeque<(u64, Permill)>, ValueQuery>;
 
 	/// Defines the block when next unsigned transaction will be accepted.
 	///
@@ -404,6 +408,14 @@ enum TransactionType {
 	Raw,
 	None,
 }
+
+
+const HTTP_REMOTE_REQUEST: &str = "https://api.coincap.io/v2/assets/polkadot";
+const HTTP_HEADER_USER_AGENT: &str = "cc";
+
+const FETCH_TIMEOUT_PERIOD: u64 = 30000; // in milli-seconds
+//const LOCK_TIMEOUT_EXPIRATION: u64 = FETCH_TIMEOUT_PERIOD + 1000; // in milli-seconds
+//const LOCK_BLOCK_EXPIRATION: u32 = 3; // in block number
 
 impl<T: Config> Pallet<T> {
 	/// Chooses which transaction type to send.
@@ -609,7 +621,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Fetch current price and return the result in cents.
 	fn fetch_price() -> Result<u32, http::Error> {
-		println!("{}",1);
+		println!("{}", 1);
 		// We want to keep the offchain worker execution time reasonable, so we set a hard-coded
 		// deadline to 2s to complete the external call.
 		// You can also wait idefinitely for the response, however you may still get a timeout
@@ -620,8 +632,7 @@ impl<T: Config> Pallet<T> {
 		// you can find in `sp_io`. The API is trying to be similar to `reqwest`, but
 		// since we are running in a custom WASM execution environment we can't simply
 		// import the library here.
-		let request =
-			http::Request::get("https://api.coincap.io/v2/assets/polkadot");
+		let request = http::Request::get("https://api.coincap.io/v2/assets/polkadot");
 		// We set the deadline for sending of the request, note that awaiting response can
 		// have a separate deadline. Next we send the request, before that it's also possible
 		// to alter request headers or stream body content in case of non-GET requests.
@@ -645,7 +656,7 @@ impl<T: Config> Pallet<T> {
 		// Note that the return object allows you to read the body in chunks as well
 		// with a way to control the deadline.
 		let body = response.body().collect::<Vec<u8>>();
-		println!("response{:?}",body);
+		println!("response{:?}", body);
 
 		// Create a str slice from the body.
 		let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
@@ -653,7 +664,7 @@ impl<T: Config> Pallet<T> {
 			http::Error::Unknown
 		})?;
 
-		println!("body_strbody_strbody_str{}",body_str);
+		println!("body_strbody_strbody_str{}", body_str);
 
 		let price = match Self::parse_price(body_str) {
 			Some(price) => Ok(price),
@@ -669,6 +680,52 @@ impl<T: Config> Pallet<T> {
 		Ok(price)
 	}
 
+
+	// This function uses the `offchain::http` API to query the remote github information,
+	///   and returns the JSON response as vector of bytes.
+	pub fn fetch_from_remote() -> Result<Vec<u8>, Error<T>> {
+		println!("{}",1);
+		log::info!("sending request to: {}", HTTP_REMOTE_REQUEST);
+
+		// Initiate an external HTTP GET request. This is using high-level wrappers from `sp_runtime`.
+		let request = rt_offchain::http::Request::get(HTTP_REMOTE_REQUEST);
+		println!("{}",2);
+
+		// Keeping the offchain worker execution time reasonable, so limiting the call to be within 3s.
+		let timeout = sp_io::offchain::timestamp()
+			.add(rt_offchain::Duration::from_millis(FETCH_TIMEOUT_PERIOD));
+			println!("{}",3);
+
+		// For github API request, we also need to specify `user-agent` in http request header.
+		//   See: https://developer.github.com/v3/#user-agent-required
+		let pending = request
+			.add_header("User-Agent", HTTP_HEADER_USER_AGENT)
+			.deadline(timeout) // Setting the timeout time
+			.send() // Sending the request out by the host
+			.map_err(|_| <Error<T>>::HttpFetchingError)?;
+			println!("{}",5);
+
+		// By default, the http request is async from the runtime perspective. So we are asking the
+		//   runtime to wait here.
+		// The returning value here is a `Result` of `Result`, so we are unwrapping it twice by two `?`
+		//   ref: https://substrate.dev/rustdocs/v2.0.0/sp_runtime/offchain/http/struct.PendingRequest.html#method.try_wait
+		let response = pending
+			.try_wait(timeout)
+			.map_err(|_| <Error<T>>::HttpFetchingError)?
+			.map_err(|_| <Error<T>>::HttpFetchingError)?;
+
+		println!("responseresponseresponse{:?}",response);
+
+		println!("{}",6);
+
+		if response.code != 200 {
+			log::error!("Unexpected http request status code: {}", response.code);
+			return Err(<Error<T>>::HttpFetchingError);
+		}
+
+		// Next we fully read the response body and collect it to a vector of bytes.
+		Ok(response.body().collect::<Vec<u8>>())
+	}
 	/// Parse the price from the given JSON string using `lite-json`.
 	///
 	/// Returns `None` when parsing failed or `Some(price in cents)` when parsing is successful.
@@ -689,76 +746,73 @@ impl<T: Config> Pallet<T> {
 		Some(price.integer as u32 * 100 + (price.fraction / 10_u64.pow(exp)) as u32)
 	}
 
+	// fn fetch_price_info() -> Result<(), Error<T>> {
+	// 	// Create a reference to Local Storage value.
+	// 	// Since the local storage is common for all offchain workers, it's a good practice
+	// 	// to prepend our entry with the pallet name.
+	// 	let s_info = StorageValueRef::persistent(b"offchain-demo::dot-price-info");
 
+	// 	// Local storage is persisted and shared between runs of the offchain workers,
+	// 	// offchain workers may run concurrently. We can use the `mutate` function to
+	// 	// write a storage entry in an atomic fashion.
+	// 	//
+	// 	// With a similar API as `StorageValue` with the variables `get`, `set`, `mutate`.
+	// 	// We will likely want to use `mutate` to access
+	// 	// the storage comprehensively.
+	// 	//
+	// 	if let Ok(Some(gh_info)) = s_info.get::<DotPriceInfo>() {
+	// 		// gh-info has already been fetched. Return early.
+	// 		log::info!("cached gh-info: {:?}", gh_info);
+	// 		return Ok(());
+	// 	}
 
-	fn fetch_price_info() -> Result<(), Error<T>> {
-		// Create a reference to Local Storage value.
-		// Since the local storage is common for all offchain workers, it's a good practice
-		// to prepend our entry with the pallet name.
-		let s_info = StorageValueRef::persistent(b"offchain-demo::dot-price-info");
+	// 	// Since off-chain storage can be accessed by off-chain workers from multiple runs, it is important to lock
+	// 	//   it before doing heavy computations or write operations.
+	// 	//
+	// 	// There are four ways of defining a lock:
+	// 	//   1) `new` - lock with default time and block exipration
+	// 	//   2) `with_deadline` - lock with default block but custom time expiration
+	// 	//   3) `with_block_deadline` - lock with default time but custom block expiration
+	// 	//   4) `with_block_and_time_deadline` - lock with custom time and block expiration
+	// 	// Here we choose the most custom one for demonstration purpose.
+	// 	let mut lock = StorageLock::<BlockAndTime<Self>>::with_block_and_time_deadline(
+	// 		b"offchain-demo::lock",
+	// 		LOCK_BLOCK_EXPIRATION,
+	// 		rt_offchain::Duration::from_millis(LOCK_TIMEOUT_EXPIRATION),
+	// 	);
 
-		// Local storage is persisted and shared between runs of the offchain workers,
-		// offchain workers may run concurrently. We can use the `mutate` function to
-		// write a storage entry in an atomic fashion.
-		//
-		// With a similar API as `StorageValue` with the variables `get`, `set`, `mutate`.
-		// We will likely want to use `mutate` to access
-		// the storage comprehensively.
-		//
-		if let Ok(Some(gh_info)) = s_info.get::<DotPriceInfo>() {
-			// gh-info has already been fetched. Return early.
-			log::info!("cached gh-info: {:?}", gh_info);
-			return Ok(());
-		}
-
-		// Since off-chain storage can be accessed by off-chain workers from multiple runs, it is important to lock
-		//   it before doing heavy computations or write operations.
-		//
-		// There are four ways of defining a lock:
-		//   1) `new` - lock with default time and block exipration
-		//   2) `with_deadline` - lock with default block but custom time expiration
-		//   3) `with_block_deadline` - lock with default time but custom block expiration
-		//   4) `with_block_and_time_deadline` - lock with custom time and block expiration
-		// Here we choose the most custom one for demonstration purpose.
-		let mut lock = StorageLock::<BlockAndTime<Self>>::with_block_and_time_deadline(
-			b"offchain-demo::lock",
-			LOCK_BLOCK_EXPIRATION,
-			rt_offchain::Duration::from_millis(LOCK_TIMEOUT_EXPIRATION),
-		);
-
-		// We try to acquire the lock here. If failed, we know the `fetch_n_parse` part inside is being
-		//   executed by previous run of ocw, so the function just returns.
-		if let Ok(_guard) = lock.try_lock() {
-			match Self::fetch_n_parse() {
-				Ok(gh_info) => {
-					s_info.set(&gh_info);
-				}
-				Err(err) => {
-					return Err(err);
-				}
-			}
-		}
-		Ok(())
-	}
+	// 	// We try to acquire the lock here. If failed, we know the `fetch_n_parse` part inside is being
+	// 	//   executed by previous run of ocw, so the function just returns.
+	// 	if let Ok(_guard) = lock.try_lock() {
+	// 		match Self::fetch_n_parse() {
+	// 			Ok(gh_info) => {
+	// 				s_info.set(&gh_info);
+	// 			}
+	// 			Err(err) => {
+	// 				return Err(err);
+	// 			}
+	// 		}
+	// 	}
+	// 	Ok(())
+	// }
 
 	/// Fetch from remote and deserialize the JSON to a struct
-	fn fetch_n_parse() -> Result<DotPriceInfo, Error<T>> {
-		let resp_bytes = Self::fetch_from_remote().map_err(|e| {
-			log::error!("fetch_from_remote error: {:?}", e);
-			<Error<T>>::HttpFetchingError
-		})?;
+	// fn fetch_n_parse() -> Result<DotPriceInfo, Error<T>> {
+	// 	let resp_bytes = Self::fetch_from_remote().map_err(|e| {
+	// 		log::error!("fetch_from_remote error: {:?}", e);
+	// 		<Error<T>>::HttpFetchingError
+	// 	})?;
 
-		let resp_str =
-			str::from_utf8(&resp_bytes).map_err(|_| <Error<T>>::HttpFetchingError)?;
-		// Print out our fetched JSON string
-		log::info!("{}", resp_str);
+	// 	let resp_str =
+	// 		str::from_utf8(&resp_bytes).map_err(|_| <Error<T>>::HttpFetchingError)?;
+	// 	// Print out our fetched JSON string
+	// 	log::info!("{}", resp_str);
 
-		// Deserializing JSON to struct, thanks to `serde` and `serde_derive`
-		let gh_info: DotPriceInfo =
-			serde_json::from_str(&resp_str).map_err(|_| <Error<T>>::HttpFetchingError)?;
-		Ok(gh_info)
-	}
-
+	// 	// Deserializing JSON to struct, thanks to `serde` and `serde_derive`
+	// 	let gh_info: DotPriceInfo =
+	// 		serde_json::from_str(&resp_str).map_err(|_| <Error<T>>::HttpFetchingError)?;
+	// 	Ok(gh_info)
+	// }
 
 	// fn fetch_n_parse() -> Result<DotPriceInfo, Error<T>> {
 	// 	let resp_bytes = Self::fetch_from_remote().map_err(|e| {
@@ -776,45 +830,44 @@ impl<T: Config> Pallet<T> {
 	// 	Ok(dot_price_info)
 	// }
 
-	fn fetch_from_remote() -> Result<Vec<u8>, Error<T>> {
-		log::info!("sending request to: {}", HTTP_REMOTE_REQUEST);
+	// fn fetch_from_remote() -> Result<Vec<u8>, Error<T>> {
+	// 	log::info!("sending request to: {}", HTTP_REMOTE_REQUEST);
 
-		// Initiate an external HTTP GET request. This is using high-level wrappers from `sp_runtime`.
-		let request = offchain::http::Request::get(HTTP_REMOTE_REQUEST);
+	// 	// Initiate an external HTTP GET request. This is using high-level wrappers from `sp_runtime`.
+	// 	let request = offchain::http::Request::get(HTTP_REMOTE_REQUEST);
 
-		// Keeping the offchain worker execution time reasonable, so limiting the call to be within 3s.
-		let timeout = sp_io::offchain::timestamp()
-			.add(offchain::Duration::from_millis(FETCH_TIMEOUT_PERIOD));
+	// 	// Keeping the offchain worker execution time reasonable, so limiting the call to be within 3s.
+	// 	let timeout = sp_io::offchain::timestamp()
+	// 		.add(offchain::Duration::from_millis(FETCH_TIMEOUT_PERIOD));
 
-		// For github API request, we also need to specify `user-agent` in http request header.
-		//   See: https://developer.github.com/v3/#user-agent-required
-		let pending = request
-			.add_header("User-Agent", HTTP_HEADER_USER_AGENT)
-			.deadline(timeout) // Setting the timeout time
-			.send() // Sending the request out by the host
-			.map_err(|_| <Error<T>>::HttpFetchingError)?;
+	// 	// For github API request, we also need to specify `user-agent` in http request header.
+	// 	//   See: https://developer.github.com/v3/#user-agent-required
+	// 	let pending = request
+	// 		.add_header("User-Agent", HTTP_HEADER_USER_AGENT)
+	// 		.deadline(timeout) // Setting the timeout time
+	// 		.send() // Sending the request out by the host
+	// 		.map_err(|_| <Error<T>>::HttpFetchingError)?;
 
-		// By default, the http request is async from the runtime perspective. So we are asking the
-		//   runtime to wait here.
-		// The returning value here is a `Result` of `Result`, so we are unwrapping it twice by two `?`
-		//   ref: https://substrate.dev/rustdocs/v2.0.0/sp_runtime/offchain/http/struct.PendingRequest.html#method.try_wait
-		let response = pending
-			.try_wait(timeout)
-			.map_err(|_| <Error<T>>::HttpFetchingError)?
-			.map_err(|_| <Error<T>>::HttpFetchingError)?;
+	// 	// By default, the http request is async from the runtime perspective. So we are asking the
+	// 	//   runtime to wait here.
+	// 	// The returning value here is a `Result` of `Result`, so we are unwrapping it twice by two `?`
+	// 	//   ref: https://substrate.dev/rustdocs/v2.0.0/sp_runtime/offchain/http/struct.PendingRequest.html#method.try_wait
+	// 	let response = pending
+	// 		.try_wait(timeout)
+	// 		.map_err(|_| <Error<T>>::HttpFetchingError)?
+	// 		.map_err(|_| <Error<T>>::HttpFetchingError)?;
 
-		if response.code != 200 {
-			log::error!("Unexpected http request status code: {}", response.code);
-			return Err(<Error<T>>::HttpFetchingError);
-		}
+	// 	if response.code != 200 {
+	// 		log::error!("Unexpected http request status code: {}", response.code);
+	// 		return Err(<Error<T>>::HttpFetchingError);
+	// 	}
 
-		// Next we fully read the response body and collect it to a vector of bytes.
-		Ok(response.body().collect::<Vec<u8>>())
-	}
-
+	// 	// Next we fully read the response body and collect it to a vector of bytes.
+	// 	Ok(response.body().collect::<Vec<u8>>())
+	// }
 
 	/// Add new price to the list.
-	fn add_price(who: T::AccountId, price: DotPrice) {
+	fn add_price(who: T::AccountId, price: u32) {
 		log::info!("Adding to the average: {}", price);
 		<Prices<T>>::mutate(|prices| {
 			const MAX_LEN: usize = 64;
@@ -895,31 +948,30 @@ impl<T: Config> Pallet<T> {
 			.build()
 	}
 
-	pub fn de_string_to_tuple<'de, D>(de: D) -> Result<DotPrice, D::Error>
-	where
-		D: Deserializer<'de>,
-	{
-		let s: &str = Deserialize::deserialize(de)?;
-		let price_usd: Vec<&str> = s.split(".").collect();
-		let price_usd_num: u64 = price_usd[0].parse().unwrap();
-		let price_usd_permill: Permill = Permill::from_parts(price_usd[1][..6].parse::<u32>().unwrap());
-		Ok((price_usd_num, price_usd_permill))
-	}
+	// pub fn de_string_to_tuple<'de, D>(de: D) -> Result<DotPrice, D::Error>
+	// where
+	// 	D: Deserializer<'de>,
+	// {
+	// 	let s: &str = Deserialize::deserialize(de)?;
+	// 	let price_usd: Vec<&str> = s.split(".").collect();
+	// 	let price_usd_num: u64 = price_usd[0].parse().unwrap();
+	// 	let price_usd_permill: Permill = Permill::from_parts(price_usd[1][..6].parse::<u32>().unwrap());
+	// 	Ok((price_usd_num, price_usd_permill))
+	// }
 
-	fn fetch_n_parse<U>() -> Result<U, Error<T>> {
-			let resp_bytes = Self::fetch_from_remote().map_err(|e| {
-				log::error!("fetch_from_remote error: {:?}", e);
-				<Error<T>>::HttpFetchingError
-			})?;
+	// fn fetch_n_parse<U>() -> Result<U, Error<T>> {
+	// 		let resp_bytes = Self::fetch_from_remote().map_err(|e| {
+	// 			log::error!("fetch_from_remote error: {:?}", e);
+	// 			<Error<T>>::HttpFetchingError
+	// 		})?;
 
-			let resp_str =
-				str::from_utf8(&resp_bytes).map_err(|_| <Error<T>>::HttpFetchingError)?;
-			// Print out our fetched JSON string
-			log::info!("response: {}", resp_str);
+	// 		let resp_str =
+	// 			str::from_utf8(&resp_bytes).map_err(|_| <Error<T>>::HttpFetchingError)?;
+	// 		// Print out our fetched JSON string
+	// 		log::info!("response: {}", resp_str);
 
-			// Deserializing JSON to struct, thanks to `serde` and `serde_derive`
-			let info: U = serde_json::from_str(resp_str).map_err(|_| <Error<T>>::DecodeFailed)?;
-			Ok(info)
-		}
-
+	// 		// Deserializing JSON to struct, thanks to `serde` and `serde_derive`
+	// 		let info: U = serde_json::from_str(resp_str).map_err(|_| <Error<T>>::DecodeFailed)?;
+	// 		Ok(info)
+	// 	}
 }
