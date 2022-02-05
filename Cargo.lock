@@ -3592,6 +3592,7 @@ dependencies = [
  "hex-literal",
  "pallet-aura",
  "pallet-balances",
+ "pallet-benchmark-demo",
  "pallet-grandpa",
  "pallet-kitties",
  "pallet-ocw",
@@ -3834,6 +3835,20 @@ dependencies = [
  "scale-info",
  "sp-runtime",
  "sp-std 4.0.0-dev",
+]
+
+[[package]]
+name = "pallet-benchmark-demo"
+version = "4.0.0-dev"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
 ]
 
 [[package]]

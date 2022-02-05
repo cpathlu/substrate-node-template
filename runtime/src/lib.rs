@@ -44,6 +44,7 @@ pub use pallet_kitties;
 
 /// pub use pallet_ocw;
 
+pub use pallet_benchmark_demo;
 
 // Make the WASM binary available.
 #[cfg(feature = "std")]
@@ -322,6 +323,11 @@ impl pallet_kitties::Config for Runtime {
 // }
 
 
+/// Configure the pallet-template in pallets/template.
+impl pallet_benchmark_demo::Config for Runtime {
+	type Event = Event;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -341,6 +347,7 @@ construct_runtime!(
 		TemplateModule: pallet_template,
 		PoeModule: pallet_poe,
 		SubstrateKitties: pallet_kitties,
+		BenchmarkDemo: pallet_benchmark_demo,
 		//SubstrateOcw: pallet_ocw,
 	}
 );
@@ -559,6 +566,7 @@ impl_runtime_apis! {
 			add_benchmark!(params, batches, pallet_balances, Balances);
 			add_benchmark!(params, batches, pallet_timestamp, Timestamp);
 			add_benchmark!(params, batches, pallet_template, TemplateModule);
+			add_benchmark!(params, batches, pallet_benchmark_demo, BenchmarkDemo);
 
 			Ok(batches)
 		}

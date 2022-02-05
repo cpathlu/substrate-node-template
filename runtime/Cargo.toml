@@ -29,6 +29,9 @@ path = '../pallets/kitties'
 default-features = false
 path = '../pallets/ocw'
 
+[dependencies.pallet-benchmark-demo]
+default-features = false
+path = '../pallets/benchmark-demo'
 
 [build-dependencies.substrate-wasm-builder]
 git = 'https://github.com/paritytech/substrate.git'
@@ -234,6 +237,7 @@ std = [
 	'pallet-transaction-payment/std',
 	'pallet-poe/std',
 	'pallet-ocw/std',
+	'pallet-benchmark-demo/std',
     'sp-api/std',
     'sp-block-builder/std',
     'sp-consensus-aura/std',
