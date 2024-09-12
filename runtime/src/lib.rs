@@ -2,46 +2,50 @@
 // `construct_runtime!` does a lot of recursion and requires us to increase the limit to 256.
 #![recursion_limit = "256"]
 
-// Make the WASM binary available.
-#[cfg(feature = "std")]
-include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
-
-use pallet_grandpa::{
-	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
-};
-use sp_api::impl_runtime_apis;
-use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
-use sp_runtime::{
-	create_runtime_str, generic, impl_opaque_keys,
-	traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, Verify},
-	transaction_validity::{TransactionSource, TransactionValidity},
-	ApplyExtrinsicResult, MultiSignature,
-};
-use sp_std::prelude::*;
-#[cfg(feature = "std")]
-use sp_version::NativeVersion;
-use sp_version::RuntimeVersion;
-
 // A few exports that help ease life for downstream crates.
 pub use frame_support::{
 	construct_runtime, parameter_types,
+	StorageValue,
 	traits::{KeyOwnerProofSystem, Randomness, StorageInfo},
 	weights::{
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
 		IdentityFee, Weight,
 	},
-	StorageValue,
 };
 pub use pallet_balances::Call as BalancesCall;
+use pallet_grandpa::{
+	AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList, fg_primitives,
+};
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::CurrencyAdapter;
+use sp_api::impl_runtime_apis;
+use sp_consensus_aura::sr25519::AuthorityId as AuraId;
+use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
+use sp_runtime::{
+	ApplyExtrinsicResult, create_runtime_str, generic,
+	impl_opaque_keys,
+	MultiSignature,
+	traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, Verify}, transaction_validity::{TransactionSource, TransactionValidity},
+};
+pub use sp_runtime::{Perbill, Permill};
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
-pub use sp_runtime::{Perbill, Permill};
+use sp_std::prelude::*;
+#[cfg(feature = "std")]
+use sp_version::NativeVersion;
+use sp_version::RuntimeVersion;
 
 /// Import the template pallet.
 pub use pallet_template;
+
+pub use pallet_poe;
+
+pub use pallet_kitties;
+
+
+// Make the WASM binary available.
+#[cfg(feature = "std")]
+include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -67,9 +71,9 @@ pub type Hash = sp_core::H256;
 /// of data like extrinsics, allowing for them to continue syncing the network through upgrades
 /// to even the core data structures.
 pub mod opaque {
-	use super::*;
-
 	pub use sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
+
+	use super::*;
 
 	/// Opaque block header type.
 	pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
@@ -212,7 +216,7 @@ impl pallet_grandpa::Config for Runtime {
 	type KeyOwnerProofSystem = ();
 
 	type KeyOwnerProof =
-		<Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
+	<Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
 
 	type KeyOwnerIdentification = <Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(
 		KeyTypeId,
@@ -279,6 +283,32 @@ impl pallet_template::Config for Runtime {
 	type Event = Event;
 }
 
+parameter_types! {
+	pub const MaxClaimLength: u32 = 256;
+}
+
+/// Configure the pallet-poe in pallets/poe.
+impl pallet_poe::Config for Runtime {
+	type Event = Event;
+	type MaxClaimLength = MaxClaimLength;
+}
+
+parameter_types! {              // <- add this macro
+    // One can own at most 9,999 Kitties
+    pub const MaxKittyOwned: u32 = 9999;
+	pub const ReserveForCreateKitty: u128 = 10_000;
+}
+
+/// Configure the pallet-template in pallets/template.
+impl pallet_kitties::Config for Runtime {
+	type Event = Event;
+	type Currency = Balances;
+	type KittyRandomness = RandomnessCollectiveFlip;
+	type MaxKittyOwned = MaxKittyOwned;
+	type KittyIndex = u64;
+	type ReserveForCreateKitty = ReserveForCreateKitty;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -296,6 +326,8 @@ construct_runtime!(
 		Sudo: pallet_sudo,
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
+		PoeModule: pallet_poe,
+		SubstrateKitties: pallet_kitties,
 	}
 );
 
